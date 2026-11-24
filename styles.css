@@ -234,30 +234,17 @@ body[data-alert-level="alert"] .orb-secondary {
 .clock-display {
   width: 100%;
   display: flex;
-  align-items: baseline;
   justify-content: center;
   text-align: center;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   font-weight: 200;
-  font-size: clamp(4.4rem, 15.6vw, 12.2rem);
+  font-size: clamp(3rem, 15.6vw, 12.2rem);
   line-height: 0.95;
-  letter-spacing: -0.035em;
-  background: linear-gradient(180deg, #ffffff 12%, rgba(214, 229, 252, 0.84) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
-}
-
-.clock-colon {
-  margin: 0 0.03em;
-  opacity: 0.78;
-}
-
-.clock-sec {
-  font-size: 0.86em;
-  opacity: 0.82;
+  /* Draw the whole time directly to avoid clipping the seconds on older Safari. */
+  color: var(--text-primary);
+  text-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
 }
 
 /* Horizontal Liquid Glass Status Strip */

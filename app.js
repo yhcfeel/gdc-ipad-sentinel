@@ -830,7 +830,7 @@
   function cacheDom() {
     var ids = [
       'stage', 'mqttBadge', 'mqttBadgeText', 'wakeBadge', 'wakeBadgeText',
-      'btnTestBark', 'btnSettings', 'dateLine', 'clockHm', 'clockSec',
+      'btnTestBark', 'btnSettings', 'dateLine', 'clockTime',
       'heartbeatCapsule', 'heartbeatLabel', 'heartbeatSub',
       'shiftCapsule', 'todayShiftText', 'sentinelStateText',
       'extraDutyCapsule', 'extraDutyBadgeText',
@@ -892,14 +892,13 @@
   }
 
   function renderClockAndCapsules(now, snap, nowMs) {
-    if (!dom.clockHm) return;
+    if (!dom.clockTime) return;
     var configured = hasConnectionConfig();
 
     dom.dateLine.textContent =
       now.getFullYear() + '年' + pad2(now.getMonth() + 1) + '月' + pad2(now.getDate()) + '日 · ' +
       WEEKDAY_NAMES[now.getDay()];
-    dom.clockHm.textContent = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
-    dom.clockSec.textContent = pad2(now.getSeconds());
+    dom.clockTime.textContent = formatTimeHms(now);
 
     // Heartbeat capsule
     var elapsedSec = state.lastHeartbeatRecvMs > 0
