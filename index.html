@@ -21,12 +21,12 @@
     <div class="ambient-orb orb-secondary"></div>
   </div>
 
-  <main id="stage" class="stage">
+  <main id="stage" class="stage" data-configured="false">
     <header class="top-bar">
       <div class="top-left">
         <div id="mqttBadge" class="mini-pill" data-state="unconfigured" title="EMQX WebSocket 链路状态">
           <span class="dot"></span>
-          <span id="mqttBadgeText">未配置连接</span>
+          <span id="mqttBadgeText">等待配置连接参数</span>
         </div>
         <div id="wakeBadge" class="mini-pill mini-pill-muted is-hidden" title="屏幕常亮锁状态">
           <span class="dot dot-wake"></span>
@@ -35,7 +35,7 @@
       </div>
 
       <div class="top-actions">
-        <button id="btnTestBark" class="icon-btn" type="button" aria-label="测试 Bark 推送" title="测试 Bark 推送">
+        <button id="btnTestBark" class="icon-btn requires-connection" type="button" aria-label="测试 Bark 推送" title="测试 Bark 推送">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -61,7 +61,7 @@
     </section>
 
     <section class="status-strip" aria-label="哨兵状态总览">
-      <div id="heartbeatCapsule" class="glass-capsule capsule-heartbeat" data-hb-state="waiting">
+      <div id="heartbeatCapsule" class="glass-capsule capsule-heartbeat requires-connection" data-hb-state="waiting">
         <span class="status-lamp" aria-hidden="true"></span>
         <div class="capsule-text">
           <span id="heartbeatLabel" class="capsule-primary">等待公司端心跳</span>
@@ -73,8 +73,8 @@
         <div class="shift-group">
           <span id="todayShiftText" class="capsule-primary">今日：未设置</span>
         </div>
-        <span class="capsule-divider" aria-hidden="true"></span>
-        <div class="sentinel-group">
+        <span class="capsule-divider requires-connection" aria-hidden="true"></span>
+        <div class="sentinel-group requires-connection">
           <span class="sentinel-dot" aria-hidden="true"></span>
           <span id="sentinelStateText" class="capsule-secondary">非值班静默</span>
         </div>
@@ -91,7 +91,7 @@
         <span class="duty-cta-dot" aria-hidden="true"></span>
         <span id="btnExtraDutyText">今日额外值班</span>
       </button>
-      <p id="subStatusHint" class="sub-hint">请点击右上角「连接设置」粘贴 GDC_SENTINEL 配置码</p>
+      <p id="subStatusHint" class="sub-hint"></p>
     </footer>
   </main>
 
@@ -103,7 +103,7 @@
           <h2 id="overrideModalTitle" class="sheet-title">开启今日额外晚班</h2>
           <p class="sheet-subtitle">16:30 – 23:59 · 选择本次接单人，将立即三端同步并布防哨兵</p>
         </div>
-        <button id="btnCloseOverride" class="close-btn" type="button" aria-label="关闭">&times;</button>
+        <button id="btnCloseOverride" class="close-btn" type="button" aria-label="关闭"><span aria-hidden="true">&times;</span></button>
       </div>
 
       <div class="sheet-body">
@@ -145,7 +145,7 @@
           <h2 id="settingsModalTitle" class="sheet-title">连接设置与状态日志</h2>
           <p class="sheet-subtitle">配置仅保存在本机浏览器 localStorage，绝不上传第三方服务器</p>
         </div>
-        <button id="btnCloseSettings" class="close-btn" type="button" aria-label="关闭">&times;</button>
+        <button id="btnCloseSettings" class="close-btn" type="button" aria-label="关闭"><span aria-hidden="true">&times;</span></button>
       </div>
 
       <div class="settings-layout">

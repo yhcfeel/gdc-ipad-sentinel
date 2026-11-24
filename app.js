@@ -18,15 +18,7 @@
 
   var WEEKDAY_NAMES = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
-  var BURN_IN_OFFSETS = [
-    [0, 0],
-    [3, -2],
-    [-3, 3],
-    [2, 4],
-    [-4, -2],
-    [4, 2],
-    [-2, -3]
-  ];
+  var BURN_IN_OFFSETS_Y = [0, -2, 3, 4, -2, 2, -3];
 
   // Runtime state
   var state = {
@@ -134,6 +126,23 @@
     };
   }
 
+  function isValidMqttUrl(value) {
+    if (!/^wss?:\/\/[^/]/i.test(value) || /[\s\\#]/.test(value)) return false;
+    try {
+      var url = new URL(value);
+      return Boolean(url.hostname) && (
+        url.protocol === 'wss:' ||
+        (url.protocol === 'ws:' && window.location.protocol !== 'https:')
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function hasConnectionConfig() {
+    return isValidMqttUrl(state.config.wssUrl);
+  }
+
   state.config = normalizeConfig(state.config);
 
   // UTF-8 safe Base64 encode/decode for GDC_SENTINEL: config string
@@ -193,7 +202,7 @@
       throw new Error('配置码结构不正确');
     }
     var cfg = normalizeConfig(parsed);
-    if (!cfg.wssUrl || !/^wss?:\/\//i.test(cfg.wssUrl)) {
+    if (!isValidMqttUrl(cfg.wssUrl)) {
       throw new Error('配置码缺少有效的 wssUrl');
     }
     return cfg;
@@ -280,7 +289,7 @@
     var condNightShift = todayShift === '晚班' && inEveningWindow;
     var condLunchDuty = todayShift === '早班值班' && inLunchWindow;
 
-    var sentinelActive = Boolean(condOverrideRemote || condNightShift || condLunchDuty);
+    var sentinelActive = hasConnectionConfig() && (condOverrideRemote || condNightShift || condLunchDuty);
 
     return {
       todayStr: todayStr,
@@ -307,7 +316,7 @@
   }
 
   function unlockAlertAudio() {
-    if (state.audioUnlocked) return;
+    if (state.audioUnlocked || !hasConnectionConfig()) return;
     var el = getAlertAudioEl();
     if (!el) return;
     try {
@@ -338,7 +347,17 @@
     }
   }
 
+  function stopAlertAudio() {
+    window.clearTimeout(state.audioRepeatTimer);
+    state.audioRepeatTimer = null;
+    if (alertAudioEl) {
+      alertAudioEl.onended = null;
+      alertAudioEl.pause();
+    }
+  }
+
   function playAlert(repeat) {
+    if (!hasConnectionConfig()) return;
     var times = Number(repeat);
     if (!isFinite(times) || times < 1) times = 1;
     times = Math.floor(times);
@@ -346,13 +365,10 @@
     var el = getAlertAudioEl();
     if (!el) return;
 
-    if (state.audioRepeatTimer) {
-      window.clearTimeout(state.audioRepeatTimer);
-      state.audioRepeatTimer = null;
-    }
-
+    stopAlertAudio();
     var played = 0;
     function playOnce() {
+      state.audioRepeatTimer = null;
       played += 1;
       try {
         el.muted = false;
@@ -368,10 +384,8 @@
       function scheduleNext() {
         if (scheduledNext || played >= times) return;
         scheduledNext = true;
-        state.audioRepeatTimer = window.setTimeout(function () {
-          state.audioRepeatTimer = null;
-          playOnce();
-        }, 400);
+        window.clearTimeout(state.audioRepeatTimer);
+        state.audioRepeatTimer = window.setTimeout(playOnce, 400);
       }
 
       if (played < times) {
@@ -396,7 +410,7 @@
       }
 
       if (played < times) {
-        window.setTimeout(function () {
+        state.audioRepeatTimer = window.setTimeout(function () {
           if (!scheduledNext) {
             el.onended = null;
             scheduleNext();
@@ -410,6 +424,7 @@
 
   // Bark push via fetch no-cors per contract
   function sendBarkPush(title, body, sound, level) {
+    if (!hasConnectionConfig()) return Promise.resolve(false);
     var barkBase = String(state.config.barkUrl || '').trim();
     if (!barkBase) {
       addLog('未配置 Bark 地址，无法发送推送：' + title, 'warn');
@@ -471,7 +486,7 @@
   }
 
   function scheduleExponentialReconnect() {
-    if (!state.mqttClient || !state.config.wssUrl) return;
+    if (!state.mqttClient || !hasConnectionConfig()) return;
     if (state.reconnectTimer) return;
 
     var delays = [3000, 6000, 12000, 24000, 30000];
@@ -495,9 +510,17 @@
 
   function connectMqtt() {
     disconnectMqtt();
+    stopAlertAudio();
+    state.lastHeartbeatRecvMs = 0;
+    state.lastHeartbeatPayloadTs = 0;
+    state.heartbeatData = null;
+    state.sentinelActive = false;
+    state.sentinelEnteredAtMs = 0;
+    state.alert.isOfflineAlerted = false;
+    state.alert.cooldownUntilMs = 0;
 
     var cfg = state.config;
-    if (!cfg.wssUrl) {
+    if (!hasConnectionConfig()) {
       state.mqttState = 'unconfigured';
       renderAll();
       return;
@@ -711,9 +734,11 @@
     saveJson(STORAGE_KEYS.OVERRIDE, state.override);
     renderAll();
 
+    if (!hasConnectionConfig()) return;
     if (state.mqttClient && state.mqttConnected) {
       var t = getTopics();
       state.mqttClient.publish(t.override, JSON.stringify(payload), { qos: 1, retain: true }, function (err) {
+        if (!hasConnectionConfig()) return;
         if (err) {
           addLog('额外值班发布失败：' + err.message, 'error');
           showToast('同步发送失败，请检查网络');
@@ -745,6 +770,11 @@
     var now = new Date();
     var nowMs = now.getTime();
     var snap = computeDutySnapshot(now);
+
+    if (!hasConnectionConfig()) {
+      renderClockAndCapsules(now, snap, nowMs);
+      return;
+    }
 
     if (snap.sentinelActive && !state.sentinelActive) {
       state.sentinelEnteredAtMs = nowMs;
@@ -831,9 +861,10 @@
 
   function renderTopStatus() {
     if (!dom.mqttBadge) return;
+    dom.stage.setAttribute('data-configured', String(hasConnectionConfig()));
     dom.mqttBadge.setAttribute('data-state', state.mqttState);
     var map = {
-      unconfigured: '未配置连接',
+      unconfigured: '等待配置连接参数',
       connecting: '正在连接 EMQX…',
       connected: 'EMQX 已连接',
       reconnecting: '断线重连中…',
@@ -862,6 +893,7 @@
 
   function renderClockAndCapsules(now, snap, nowMs) {
     if (!dom.clockHm) return;
+    var configured = hasConnectionConfig();
 
     dom.dateLine.textContent =
       now.getFullYear() + '年' + pad2(now.getMonth() + 1) + '月' + pad2(now.getDate()) + '日 · ' +
@@ -875,9 +907,8 @@
       : -1;
 
     var hbState = 'waiting';
-    if (!state.config.wssUrl) {
-      hbState = 'waiting';
-      dom.heartbeatLabel.textContent = '待配置连接';
+    if (!configured) {
+      dom.heartbeatLabel.textContent = '等待公司端心跳';
       dom.heartbeatSub.textContent = '距上次心跳 -- 秒';
     } else if (elapsedSec < 0) {
       if (state.alert.isOfflineAlerted) {
@@ -938,9 +969,7 @@
     }
 
     // Bottom subtle hint
-    if (!state.config.wssUrl) {
-      dom.subStatusHint.textContent = '请点击右上角「连接设置」粘贴 GDC_SENTINEL 配置码';
-    } else if (state.alert.isOfflineAlerted && state.alert.cooldownUntilMs > nowMs) {
+    if (configured && state.alert.isOfflineAlerted && state.alert.cooldownUntilMs > nowMs) {
       var remainMin = Math.ceil((state.alert.cooldownUntilMs - nowMs) / 60000);
       dom.subStatusHint.textContent = '已发送 Bark 失联告警并通知家机 · 冷却剩余约 ' + remainMin + ' 分钟';
     } else if (state.mqttConnected && (nowMs - state.mqttConnectedSinceMs < STABLE_CONN_MS)) {
@@ -1125,11 +1154,9 @@
 
   // Subtle 5-minute pixel shift for burn-in protection (2~4px)
   function stepBurnInShift() {
-    state.burnInIdx = (state.burnInIdx + 1) % BURN_IN_OFFSETS.length;
-    var pair = BURN_IN_OFFSETS[state.burnInIdx];
+    state.burnInIdx = (state.burnInIdx + 1) % BURN_IN_OFFSETS_Y.length;
     if (dom.stage) {
-      dom.stage.style.setProperty('--shift-x', pair[0] + 'px');
-      dom.stage.style.setProperty('--shift-y', pair[1] + 'px');
+      dom.stage.style.setProperty('--shift-y', BURN_IN_OFFSETS_Y[state.burnInIdx] + 'px');
     }
   }
 
@@ -1187,6 +1214,7 @@
 
     // Top bar actions
     dom.btnTestBark.addEventListener('click', function () {
+      if (!hasConnectionConfig()) return;
       unlockAlertAudio();
       playAlert(1);
       if (!state.config.barkUrl) {
@@ -1227,8 +1255,8 @@
         topicPrefix: dom.inputTopicPrefix.value,
         barkUrl: dom.inputBarkUrl.value
       });
-      if (!draft.wssUrl) {
-        showToast('请先填写 WSS 地址再生成配置码');
+      if (!isValidMqttUrl(draft.wssUrl)) {
+        showToast('请先填写有效的 MQTT WebSocket 地址再生成配置码');
         return;
       }
       var code = buildConfigCode(draft);
@@ -1247,8 +1275,8 @@
         topicPrefix: dom.inputTopicPrefix.value,
         barkUrl: dom.inputBarkUrl.value
       });
-      if (!draft.wssUrl || !/^wss?:\/\//i.test(draft.wssUrl)) {
-        showToast('请输入以 wss:// 或 ws:// 开头的有效地址');
+      if (!isValidMqttUrl(draft.wssUrl)) {
+        showToast('请输入有效的 MQTT WebSocket 地址（HTTPS 页面需使用 wss://）');
         return;
       }
       applyNewConfig(draft, '手动保存');
@@ -1257,15 +1285,14 @@
     });
 
     dom.btnClearConfig.addEventListener('click', function () {
-      disconnectMqtt();
       state.config = normalizeConfig({ topicPrefix: DEFAULT_TOPIC_PREFIX });
       saveJson(STORAGE_KEYS.CONFIG, state.config);
-      state.mqttState = 'unconfigured';
+      connectMqtt();
+      window.clearTimeout(state.toastTimer);
+      dom.toast.classList.add('is-hidden');
       dom.configCodeInput.value = '';
       openSettingsModal();
-      renderAll();
       addLog('连接配置已清空', 'warn');
-      showToast('配置已清空');
     });
 
     dom.btnClearLogs.addEventListener('click', function () {
@@ -1308,14 +1335,8 @@
     registerServiceWorker();
     requestWakeLock();
 
-    var initSnap = computeDutySnapshot(new Date());
-    if (initSnap.sentinelActive) {
-      state.sentinelActive = true;
-      state.sentinelEnteredAtMs = Date.now();
-    }
-
     renderAll();
-    if (state.config.wssUrl) {
+    if (hasConnectionConfig()) {
       connectMqtt();
     }
 

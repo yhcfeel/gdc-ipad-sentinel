@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'gdc-ipad-sentinel-';
-const CACHE_NAME = CACHE_PREFIX + 'v3';
+const CACHE_NAME = CACHE_PREFIX + 'v4';
 
 const PRECACHE_ASSETS = [
   './',
@@ -18,21 +18,30 @@ const PRECACHE_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then((cache) => cache.addAll(
+        PRECACHE_ASSETS.map((asset) => new Request(asset, { cache: 'reload' }))
+      ))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys
-          .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const oldCaches = keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME);
+    await Promise.all(oldCaches.map((key) => caches.delete(key)));
+    await self.clients.claim();
+
+    if (oldCaches.length > 0) {
+      const windows = await self.clients.matchAll({ type: 'window' });
+      for (const client of windows) {
+        if (client.url.startsWith(self.registration.scope)) {
+          // Let activation finish before the new worker handles the navigation.
+          client.navigate(client.url).catch(() => {});
+        }
+      }
+    }
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

@@ -19,7 +19,6 @@
   --cyan-ice: #72c6ff;
   --violet-accent: #9b8cff;
 
-  --shift-x: 0px;
   --shift-y: 0px;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
@@ -107,6 +106,7 @@ body[data-alert-level="alert"] .orb-secondary {
 
 /* Stage with 5-minute subtle anti-burn-in pixel shift */
 .stage {
+  --stage-inline-padding: calc(28px + max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)));
   position: relative;
   z-index: 1;
   width: 100%;
@@ -114,16 +114,17 @@ body[data-alert-level="alert"] .orb-secondary {
   height: 100dvh;
   padding:
     calc(18px + env(safe-area-inset-top, 0px))
-    calc(28px + env(safe-area-inset-right, 0px))
-    calc(20px + env(safe-area-inset-bottom, 0px))
-    calc(28px + env(safe-area-inset-left, 0px));
+    var(--stage-inline-padding)
+    calc(20px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  transform: translate3d(var(--shift-x), var(--shift-y), 0);
+  transform: translate3d(0, var(--shift-y), 0);
   transition: transform 2.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+.stage[data-configured="false"] .requires-connection { display: none; }
 
 /* Top bar */
 .top-bar {
@@ -213,6 +214,7 @@ body[data-alert-level="alert"] .orb-secondary {
 
 /* StandBy Hero Clock */
 .clock-hero {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -230,9 +232,11 @@ body[data-alert-level="alert"] .orb-secondary {
 }
 
 .clock-display {
-  display: inline-flex;
+  width: 100%;
+  display: flex;
   align-items: baseline;
   justify-content: center;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   font-weight: 200;
@@ -504,6 +508,8 @@ body[data-alert-level="alert"] .orb-secondary {
   margin-bottom: 16px;
 }
 
+.sheet-header > :first-child { min-width: 0; }
+
 .sheet-title {
   margin: 0;
   font-size: 18px;
@@ -517,15 +523,21 @@ body[data-alert-level="alert"] .orb-secondary {
 }
 
 .close-btn {
+  -webkit-appearance: none;
   appearance: none;
+  padding: 0;
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
-  font-size: 20px;
-  line-height: 1;
+  font: 400 24px/1 var(--font-sans);
   cursor: pointer;
 }
 
